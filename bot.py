@@ -1,79 +1,57 @@
-import os
-import random
-import time
-import logging
-from flask import Flask
-from threading import Thread
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
+from telegram import InputFile, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from flask import Flask, request
+import logging
+import imghdr  # بدل imgdhr
+import os
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+# تفعيل اللوجز لمعرفة الأخطاء
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-# تخزين الألعاب الجارية
-games = {}
+# ضع توكن البوت هنا
+TOKEN = os.environ.get("BOT_TOKEN") or "ضع_التوكن_هنا"
 
-# دوال أوامر البوت
-def start_cmd(update, context):
-    update.message.reply_text("أهلاً بك في لعبة الروليت! أرسل /newgame لبدء لعبة جديدة.")
+# إعدادات Flask
+app = Flask(__name__)
 
-def newgame_cmd(update, context):
-    chat_id = update.effective_chat.id
-    if chat_id in games:
-        update.message.reply_text("هناك لعبة جارية بالفعل.")
-        return
-    games[chat_id] = []
-    update.message.reply_text("بدأت لعبة روليت جديدة! أرسل اسمك أو اضغط /players لرؤية المشاركين.")
+@app.route('/')
+def index():
+    return "Bot is running!"
 
-def players_cmd(update, context):
-    chat_id = update.effective_chat.id
-    if chat_id not in games or len(games[chat_id]) == 0:
-        update.message.reply_text("لا يوجد لاعبين بعد.")
-    else:
-        names = "\n".join(games[chat_id])
-        update.message.reply_text(f"اللاعبون:\n{names}")
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    update = request.get_json(force=True)
+    updater.dispatcher.process_update(
+        Update.de_json(update, updater.bot)
+    )
+    return 'ok'
 
-# هنا ضع منطق لعبتك … (هذا مثال بسيط)
-# …
+# أوامر البوت
+def start(update, context):
+    update.message.reply_text("أهلاً! البوت يعمل بنجاح 🎉")
 
-# إعداد التوكن من Environment
-TOKEN = os.environ.get("BOT_TOKEN")
-if not TOKEN:
-    raise RuntimeError("ضع BOT_TOKEN في Environment Variables على Render.")
+def help_command(update, context):
+    update.message.reply_text("هذا أمر المساعدة.")
 
-# إعداد التليجرام
+# إعداد Updater
 updater = Updater(TOKEN, use_context=True)
 dp = updater.dispatcher
 
-# إضافة أوامر
-dp.add_handler(CommandHandler("start", start_cmd))
-dp.add_handler(CommandHandler("newgame", newgame_cmd))
-dp.add_handler(CommandHandler("players", players_cmd))
-# يمكنك إضافة المزيد من الأوامر هنا
+# إضافة الهاندلرز
+dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CommandHandler("help", help_command))
 
-# تطبيق Flask لتشغيله على Render
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Bot is running ✅"
-
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
+# التشغيل المحلي (بدون ويب هوك)
 if __name__ == "__main__":
-    # تشغيل Flask في Thread جانبي
-    Thread(target=run_flask).start()
-
-    # تشغيل البوت باستخدام Webhook بدلاً من Polling
-    updater.start_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get('PORT', 10000)),
-        url_path=TOKEN
-    )
-
-    # هنا ضع رابط تطبيقك على Render
-    updater.bot.set_webhook("https://اسم-تطبيقك.onrender.com/" + TOKEN)
-
-    updater.idle()
+    # إذا كنا على Render نستخدم ويب هوك
+    PORT = int(os.environ.get('PORT', 5000))
+    if os.environ.get('RENDER'):
+        updater.bot.set_webhook(f"https://roulette-bot.onrender.com/{TOKEN}")
+        app.run(host='0.0.0.0', port=PORT)
+    else:
+        # للتشغيل على جهازك أو Termux
+        updater.start_polling()
+        updater.idle()
